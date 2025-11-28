@@ -1,0 +1,9 @@
+{
+	"name": "adf-ecom-dev",
+	"location": "eastus",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "cfc9d441-8c8c-4a2b-bc7d-d829e50474b9",
+		"tenantId": "ae6b65c6-9030-4377-8ef8-ee770f048348"
+	}
+}

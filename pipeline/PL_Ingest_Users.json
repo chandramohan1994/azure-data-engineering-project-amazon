@@ -1,0 +1,192 @@
+{
+	"name": "PL_Ingest_Users",
+	"properties": {
+		"activities": [
+			{
+				"name": "Lookup_Watermark_Users",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": "SELECT LastWatermark\nFROM Metadata_Watermark\nWHERE SourceName = 'Users';\n",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DS_SQL_Users",
+						"type": "DatasetReference"
+					},
+					"firstRowOnly": true
+				}
+			},
+			{
+				"name": "Set_LastWaterMark-Users",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "Lookup_Watermark_Users",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "v_LastWatermark",
+					"value": {
+						"value": "@activity('Lookup_Watermark_Users').output.firstRow.Lastwatermark",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "Copy_Users_Incremental",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "Set_LastWaterMark-Users",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "@concat(\n'SELECT user_id, name, email, address, updated_at FROM Users WHERE updated_at > ''',\nvariables('v_LastWatermark'),\n''''\n)\n",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"sink": {
+						"type": "ParquetSink",
+						"storeSettings": {
+							"type": "AzureBlobFSWriteSettings"
+						},
+						"formatSettings": {
+							"type": "ParquetWriteSettings"
+						}
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "DS_SQL_Users",
+						"type": "DatasetReference"
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "DS_ADLS_Users_Bronze",
+						"type": "DatasetReference"
+					}
+				]
+			},
+			{
+				"name": "Log_Run_Users",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [
+					{
+						"activity": "Copy_Users_Incremental",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[dbo].[sp_Log_Ingestion_Run1]",
+					"storedProcedureParameters": {
+						"EndTime": {
+							"value": {
+								"value": "@utcNow()",
+								"type": "Expression"
+							},
+							"type": "DateTime"
+						},
+						"ErrorMessage": {
+							"value": "''",
+							"type": "String"
+						},
+						"PipelineName": {
+							"value": "PL_Ingest_Users",
+							"type": "String"
+						},
+						"Row_Count": {
+							"value": {
+								"value": "@activity('Copy_Users_Incremental').output.rowsCopied",
+								"type": "Expression"
+							},
+							"type": "Int32"
+						},
+						"SourceName": {
+							"value": "Users",
+							"type": "String"
+						},
+						"StartTime": {
+							"value": {
+								"value": "@pipeline().TriggerTime",
+								"type": "Expression"
+							},
+							"type": "DateTime"
+						},
+						"Status": {
+							"value": "SUCCESS",
+							"type": "String"
+						}
+					}
+				},
+				"linkedServiceName": {
+					"referenceName": "LS_SQL_Metadata",
+					"type": "LinkedServiceReference"
+				}
+			}
+		],
+		"variables": {
+			"v_LastWatermark": {
+				"type": "String"
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2025-11-28T00:36:17Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
